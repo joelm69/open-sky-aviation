@@ -1,0 +1,22 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Tableau
+*.twb
+*.twbx
+*.hyper
+*.twbr
+.~*
+
+# Secrets
+.env
+*.json.key
+service-account*.json
+
+# macOS
+.DS_Store
