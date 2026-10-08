@@ -10,6 +10,11 @@ TEST_SNAPSHOT_IDS = [
 ]
 
 
+# raw_snapshot_json is loaded by the BigQuery Data Transfer
+# "Open Sky GCS to BigQuery", which appends each new file in
+# gs://open-sky-aviation-raw/raw/ as it arrives. Do not load
+# snapshots into it by hand, or they will be appended twice.
+#
 # Each step rebuilds one layer from the layer before it:
 # raw_snapshot_json -> raw -> stg -> gold -> ml
 REFRESH_STEPS = [
