@@ -61,7 +61,24 @@ REFRESH_STEPS = [
             aircraft.spi,
             aircraft.position_source
         FROM
-            `{DATASET}.raw_snapshot_json` AS snapshot,
+            (
+                -- A snapshot file can be appended more than once
+                -- (e.g. by the GCS transfer and a manual load),
+                -- so keep one copy of each snapshot
+                SELECT * EXCEPT(row_num)
+                FROM (
+                    SELECT
+                        *,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY snapshot_id
+                            ORDER BY collected_at
+                        ) AS row_num
+                    FROM
+                        `{DATASET}.raw_snapshot_json`
+                )
+                WHERE
+                    row_num = 1
+            ) AS snapshot,
             UNNEST(snapshot.aircraft) AS aircraft
         WHERE
             snapshot.snapshot_id NOT IN UNNEST(@test_snapshot_ids);
