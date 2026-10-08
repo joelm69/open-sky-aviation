@@ -1,4 +1,4 @@
-import json
+import re
 
 from google.cloud import bigquery
 from google.cloud import storage
@@ -6,9 +6,14 @@ from google.cloud import storage
 
 PROJECT_ID = "open-sky-aviation"
 DATASET_ID = "aviation_analytics"
-TABLE_ID = "raw_aircraft_states"
+TABLE_ID = "raw_snapshot_json"
 
 BUCKET_NAME = "open-sky-aviation-raw"
+
+# Matches raw/aircraft_states_<snapshot_id>.json
+SNAPSHOT_FILE_PATTERN = re.compile(
+    r"^raw/aircraft_states_([A-Za-z0-9-]+)\.json$"
+)
 
 
 def create_bigquery_client():
@@ -30,11 +35,8 @@ def create_storage_client():
 def list_snapshot_ids(storage_client):
     """Find all aircraft snapshot IDs stored in GCS."""
 
-    bucket = storage_client.bucket(
-        BUCKET_NAME
-    )
-
-    blobs = bucket.list_blobs(
+    blobs = storage_client.list_blobs(
+        BUCKET_NAME,
         prefix="raw/"
     )
 
@@ -42,38 +44,29 @@ def list_snapshot_ids(storage_client):
 
     for blob in blobs:
 
-        filename = blob.name.split("/")[-1]
-
-        if not filename.startswith(
-            "aircraft_states_"
-        ):
-            continue
-
-        if not filename.endswith(".json"):
-            continue
-
-        snapshot_id = filename[
-            len("aircraft_states_"):-len(".json")
-        ]
-
-        snapshot_ids.append(
-            snapshot_id
+        match = SNAPSHOT_FILE_PATTERN.match(
+            blob.name
         )
+
+        if match:
+            snapshot_ids.append(
+                match.group(1)
+            )
 
     return snapshot_ids
 
 
 def get_existing_snapshot_ids(client):
-    """Get snapshot IDs already loaded into BigQuery."""
+    """Get snapshot IDs already loaded into raw_snapshot_json."""
 
     query = f"""
         SELECT DISTINCT snapshot_id
         FROM `{PROJECT_ID}.{DATASET_ID}.{TABLE_ID}`
     """
 
-    results = client.query(
+    results = client.query_and_wait(
         query
-    ).result()
+    )
 
     return {
         row.snapshot_id
@@ -81,105 +74,48 @@ def get_existing_snapshot_ids(client):
     }
 
 
-def read_raw_snapshot(storage_client, snapshot_id):
-    """Read one raw snapshot from GCS."""
+def build_snapshot_uri(snapshot_id):
+    """Build the GCS URI of one snapshot file."""
 
-    bucket = storage_client.bucket(
-        BUCKET_NAME
-    )
-
-    blob = bucket.blob(
-        f"raw/aircraft_states_{snapshot_id}.json"
-    )
-
-    raw_data = blob.download_as_text()
-
-    return json.loads(
-        raw_data
+    return (
+        f"gs://{BUCKET_NAME}/raw/"
+        f"aircraft_states_{snapshot_id}.json"
     )
 
 
-def prepare_aircraft_rows(snapshot):
-    """Convert one snapshot into BigQuery-compatible rows."""
+def build_load_query(snapshot_ids):
+    """Build one LOAD DATA statement for the given snapshots."""
 
-    rows = []
-
-    for aircraft in snapshot["aircraft"]:
-
-        row = {
-            "snapshot_id": aircraft["snapshot_id"],
-            "collected_at": aircraft["collected_at"],
-
-            "icao24": aircraft["icao24"],
-            "callsign": aircraft["callsign"],
-            "origin_country": aircraft["origin_country"],
-
-            "time_position": aircraft["time_position"],
-            "last_contact": aircraft["last_contact"],
-
-            "longitude": aircraft["longitude"],
-            "latitude": aircraft["latitude"],
-            "baro_altitude": aircraft["baro_altitude"],
-
-            "on_ground": aircraft["on_ground"],
-
-            "velocity": aircraft["velocity"],
-            "true_track": aircraft["true_track"],
-            "vertical_rate": aircraft["vertical_rate"],
-
-            "sensors": aircraft["sensors"],
-
-            "geo_altitude": aircraft["geo_altitude"],
-            "squawk": aircraft["squawk"],
-            "spi": aircraft["spi"],
-            "position_source": aircraft["position_source"],
-        }
-
-        rows.append(
-            row
-        )
-
-    return rows
-
-
-def insert_aircraft_rows(client, rows):
-    """Insert aircraft rows into BigQuery RAW."""
-
-    table_reference = (
-        f"{PROJECT_ID}.{DATASET_ID}.{TABLE_ID}"
+    uris = ",\n            ".join(
+        f"'{build_snapshot_uri(snapshot_id)}'"
+        for snapshot_id in snapshot_ids
     )
 
-    errors = client.insert_rows_json(
-        table_reference,
-        rows,
-    )
-
-    if errors:
-        raise RuntimeError(
-            f"BigQuery insert failed: {errors}"
-        )
-
-    print(
-        f"Inserted {len(rows)} aircraft rows into BigQuery"
-    )
+    return f"""
+        LOAD DATA INTO `{PROJECT_ID}.{DATASET_ID}.{TABLE_ID}`
+        FROM FILES (
+          format = 'JSON',
+          uris = [
+            {uris}
+          ]
+        );
+    """
 
 
-if __name__ == "__main__":
+def load_new_snapshots(storage_client, client):
+    """Load every GCS snapshot that is not yet in raw_snapshot_json.
 
-    storage_client = create_storage_client()
-    bigquery_client = create_bigquery_client()
+    Returns the snapshot IDs that were loaded.
+    """
 
-    # Find snapshots available in GCS
     gcs_snapshot_ids = list_snapshot_ids(
         storage_client
     )
 
-    # Find snapshots already loaded into BigQuery
     existing_snapshot_ids = get_existing_snapshot_ids(
-        bigquery_client
+        client
     )
 
-    # Only process snapshots that have not been loaded yet
     new_snapshot_ids = [
         snapshot_id
         for snapshot_id in gcs_snapshot_ids
@@ -200,33 +136,30 @@ if __name__ == "__main__":
         f"{len(new_snapshot_ids)}"
     )
 
-    # Load each new snapshot
+    if not new_snapshot_ids:
+        return []
+
+    # One statement loads all new files together, so a failure
+    # leaves the table unchanged rather than half-loaded
+    client.query_and_wait(
+        build_load_query(new_snapshot_ids)
+    )
+
     for snapshot_id in new_snapshot_ids:
+        print(f"Loaded snapshot: {snapshot_id}")
 
-        print()
-        print(
-            f"Loading snapshot: {snapshot_id}"
-        )
+    return new_snapshot_ids
 
-        snapshot = read_raw_snapshot(
-            storage_client,
-            snapshot_id,
-        )
 
-        rows = prepare_aircraft_rows(
-            snapshot
-        )
+if __name__ == "__main__":
 
-        print(
-            f"Prepared {len(rows)} aircraft rows"
-        )
+    storage_client = create_storage_client()
+    bigquery_client = create_bigquery_client()
 
-        insert_aircraft_rows(
-            bigquery_client,
-            rows,
-        )
+    load_new_snapshots(
+        storage_client,
+        bigquery_client,
+    )
 
     print()
-    print(
-        "BigQuery RAW loading complete."
-    )
+    print("BigQuery RAW loading complete.")
