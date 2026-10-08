@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 import requests
 
+from src import opensky_client
 from src.opensky_client import fetch_aircraft_states
 
 
@@ -107,3 +108,70 @@ def test_fetch_aircraft_states_retries_after_server_error():
         records = fetch_aircraft_states()
 
     assert records == []
+
+def test_fetch_aircraft_states_sends_bearer_token(monkeypatch):
+    monkeypatch.setenv("OPENSKY_CLIENT_ID", "test-client")
+    monkeypatch.setenv("OPENSKY_CLIENT_SECRET", "test-secret")
+    monkeypatch.setitem(
+        opensky_client._token_cache, "access_token", None
+    )
+
+    token_response = type("Response", (), {
+        "status_code": 200,
+        "raise_for_status": lambda self: None,
+        "json": lambda self: {
+            "access_token": "abc123",
+            "expires_in": 1800,
+        },
+    })()
+
+    states_response = type("Response", (), {
+        "status_code": 200,
+        "raise_for_status": lambda self: None,
+        "json": lambda self: {
+            "time": 1234567890,
+            "states": []
+        },
+    })()
+
+    with patch(
+        "src.opensky_client.requests.post",
+        return_value=token_response
+    ) as mock_post, patch(
+        "src.opensky_client.requests.get",
+        return_value=states_response
+    ) as mock_get:
+        records = fetch_aircraft_states()
+
+    assert records == []
+    mock_post.assert_called_once()
+    assert mock_get.call_args.kwargs["headers"] == {
+        "Authorization": "Bearer abc123"
+    }
+
+
+def test_fetch_aircraft_states_is_anonymous_without_credentials(
+    monkeypatch
+):
+    monkeypatch.delenv("OPENSKY_CLIENT_ID", raising=False)
+    monkeypatch.delenv("OPENSKY_CLIENT_SECRET", raising=False)
+
+    states_response = type("Response", (), {
+        "status_code": 200,
+        "raise_for_status": lambda self: None,
+        "json": lambda self: {
+            "time": 1234567890,
+            "states": []
+        },
+    })()
+
+    with patch(
+        "src.opensky_client.requests.post"
+    ) as mock_post, patch(
+        "src.opensky_client.requests.get",
+        return_value=states_response
+    ) as mock_get:
+        fetch_aircraft_states()
+
+    mock_post.assert_not_called()
+    assert mock_get.call_args.kwargs["headers"] == {}

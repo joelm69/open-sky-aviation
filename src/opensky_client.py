@@ -1,8 +1,80 @@
+import os
 import time
 import uuid
 from datetime import datetime, timezone
 
 import requests
+
+
+TOKEN_URL = (
+    "https://auth.opensky-network.org/auth/realms/opensky-network"
+    "/protocol/openid-connect/token"
+)
+
+# Refresh the token this many seconds before OpenSky says it expires
+TOKEN_EXPIRY_MARGIN = 60
+
+_token_cache = {
+    "access_token": None,
+    "expires_at": 0,
+}
+
+
+def get_access_token():
+    """Get an OpenSky OAuth2 token, or None to use anonymous access.
+
+    Reads OPENSKY_CLIENT_ID and OPENSKY_CLIENT_SECRET from the
+    environment and reuses the token until it is close to expiring.
+    """
+
+    client_id = os.environ.get("OPENSKY_CLIENT_ID")
+    client_secret = os.environ.get("OPENSKY_CLIENT_SECRET")
+
+    if not client_id or not client_secret:
+        return None
+
+    if (
+        _token_cache["access_token"]
+        and time.time() < _token_cache["expires_at"]
+    ):
+        return _token_cache["access_token"]
+
+    response = requests.post(
+        TOKEN_URL,
+        data={
+            "grant_type": "client_credentials",
+            "client_id": client_id,
+            "client_secret": client_secret,
+        },
+        timeout=30
+    )
+
+    response.raise_for_status()
+
+    token_data = response.json()
+
+    _token_cache["access_token"] = token_data["access_token"]
+    _token_cache["expires_at"] = (
+        time.time()
+        + token_data.get("expires_in", 1800)
+        - TOKEN_EXPIRY_MARGIN
+    )
+
+    print("OpenSky access token obtained")
+
+    return _token_cache["access_token"]
+
+
+def build_auth_headers():
+    """Build request headers, with a bearer token when credentials exist."""
+
+    token = get_access_token()
+
+    if token is None:
+        print("No OpenSky credentials found, using anonymous access")
+        return {}
+
+    return {"Authorization": f"Bearer {token}"}
 
 
 def wait_before_retry(attempt, max_retries):
@@ -21,18 +93,22 @@ def wait_before_retry(attempt, max_retries):
 def fetch_aircraft_states(
     url="https://opensky-network.org/api/states/all",
     params=None,
-    max_retries=3
+    max_retries=3,
+    timeout=30
 ):
 
     try:
+        headers = build_auth_headers()
+
         for attempt in range(max_retries + 1):
 
             try:
-               response = requests.get(
+                response = requests.get(
                     url,
                     params=params,
-                    timeout=10
-)
+                    headers=headers,
+                    timeout=timeout
+                )
 
             except requests.exceptions.Timeout:
                 print("Request timed out.")
@@ -44,6 +120,17 @@ def fetch_aircraft_states(
 
             except requests.exceptions.ConnectionError:
                 print("Connection error.")
+
+                if wait_before_retry(attempt, max_retries):
+                    continue
+
+                return []
+
+            if response.status_code == 401 and headers:
+                print("OpenSky token rejected, requesting a new one.")
+
+                _token_cache["access_token"] = None
+                headers = build_auth_headers()
 
                 if wait_before_retry(attempt, max_retries):
                     continue

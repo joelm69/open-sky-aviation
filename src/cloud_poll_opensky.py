@@ -10,8 +10,9 @@ def poll_once():
     print(f"Collected {len(records)} aircraft records")
 
     if not records:
-        print("No records collected.")
-        return
+        # Exit non-zero so Cloud Run marks the execution as failed
+        # instead of reporting an empty run as a success
+        raise SystemExit("No records collected.")
 
     write_raw_snapshot(records)
 
