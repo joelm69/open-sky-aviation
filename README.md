@@ -1,179 +1,164 @@
 # Global Air Traffic Monitor
 
-An end-to-end data pipeline, anomaly model and Tableau dashboard built on live
-aircraft positions from the [OpenSky Network](https://opensky-network.org/).
+**How busy is the sky, who is flying in it, and which flights look unusual?**
 
-- **Interactive dashboard:** [Traffic Overview on Tableau Public](https://public.tableau.com/views/aviation_analytics/Traffic_Overview)
-- **Case study:** [joeldataportfolio.streamlit.app](https://joeldataportfolio.streamlit.app/open_sky_aviation)
+I built a system that collects live aircraft positions from around the world,
+cleans and organises the data in the cloud, uses machine learning to spot
+unusual flights, and presents the results in interactive Tableau dashboards.
 
-## Overview
+**[View the interactive dashboard →](https://public.tableau.com/views/aviation_analytics/Traffic_Overview)**
+&nbsp;·&nbsp;
+**[Read the full case study →](https://joeldataportfolio.streamlit.app/open_sky_aviation)**
 
-OpenSky is a community network of receivers that pick up the position
-broadcasts (ADS-B) aircraft send every few seconds. This project collects
-snapshots of every aircraft OpenSky can see, stores them in Google Cloud,
-transforms them in BigQuery and screens each airborne observation for unusual
-flight behaviour with an Isolation Forest model.
+---
 
-The final dataset covers **521,880 observations of 48,577 aircraft across 47
-snapshots** between 4 and 8 October 2026.
+## At a glance
 
-## Business questions
+| | |
+|---|---|
+| **Data analysed** | 521,880 aircraft observations |
+| **Aircraft tracked** | 48,577 |
+| **Period** | 4–8 October 2026 |
+| **Source** | OpenSky Network, a public feed of live aircraft positions |
+| **Tools** | Python · SQL · Google Cloud · BigQuery · Kafka · Machine learning · Tableau |
 
-1. How much air traffic is there, and when does it peak?
-2. Where is traffic concentrated?
-3. Who is flying: which airlines and registration countries dominate?
-4. How are aircraft flying: flight phase, altitude and speed?
-5. Which aircraft behave unusually, and why?
+## The questions I set out to answer
 
-## Architecture
+1. How much air traffic is there, and when is it busiest?
+2. Where in the world is traffic concentrated?
+3. Which airlines and countries have the most aircraft in the sky?
+4. How do aircraft spend their time: cruising, climbing, descending or on the ground?
+5. Which flights behave unusually, and why?
+
+## What I found
+
+- **Traffic grows quickly through the day.** The number of aircraft in the
+  sky rose **53% in three hours** on 8 October, and it **more than doubles**
+  from early morning to mid-afternoon (UTC).
+- **US airlines dominate.** United, American, Delta and Southwest have the
+  most aircraft tracked, and **half of all aircraft are registered in the US**.
+- **Most aircraft are cruising at any moment.** About 6 in 10 are in level
+  flight, 3 in 10 are climbing or descending near airports, and 1 in 10 is on
+  the ground.
+- **Airliners cruise at 34,000–38,000 ft**, the altitude band holding 30% of
+  airborne traffic.
+- **Different airlines have different "signatures".** Regional airlines spend
+  more time on the ground and less time at cruising height than major
+  airlines, because their flights are shorter.
+- **The machine-learning model flags about 5% of observations as unusual.**
+  These are mostly aircraft climbing or descending far more steeply than
+  normal. It also caught a high-altitude research balloon and several faulty
+  sensor readings.
+
+## Recommendations
+
+- **Plan staffing around the afternoon peak**, when traffic is highest, and
+  schedule maintenance in the quieter early-morning hours.
+- **Use the anomaly model as a review queue, not an alarm.** Start with the
+  aircraft flagged most often.
+- **Build automatic data-quality checks into the pipeline**, such as
+  comparing an aircraft's two altitude readings, so faulty data is caught
+  early.
+- **Widen data coverage before drawing global conclusions**, especially for
+  Africa and Asia.
+
+## The dashboards
+
+| Dashboard | What it shows | Status |
+|---|---|---|
+| **Traffic Overview** | Headline numbers, a live map of aircraft, and how traffic changes through the day | [Published](https://public.tableau.com/views/aviation_analytics/Traffic_Overview) |
+| **Fleet & Operations** | Top airlines and countries, flight phases and cruising altitudes. Click an airline to compare it with the rest | Built, publishing soon |
+| **Anomaly Screening** | The flights the model flagged, where they are and what makes them unusual | In progress |
+
+## Skills this project demonstrates
+
+- **Data engineering:** collecting live data automatically, streaming it with
+  Kafka and storing it in Google Cloud.
+- **SQL and data modelling:** turning raw data into clean, analysis-ready
+  tables in BigQuery.
+- **Data quality:** removing duplicates, checking outliers before deleting
+  them, and labelling missing data honestly.
+- **Machine learning:** an Isolation Forest model that screens for unusual
+  flight behaviour.
+- **Data visualisation:** interactive Tableau dashboards designed around
+  business questions.
+- **Problem solving:** when the data provider blocked requests from Google
+  Cloud, I diagnosed it from the logs and redesigned the collection step while
+  keeping the rest of the system in the cloud.
+
+## Being honest about the data
+
+- OpenSky relies on volunteer receivers, so North America and Europe are
+  covered best. The numbers reflect the aircraft OpenSky could see, not every
+  flight in the world.
+- An aircraft's "country" is where it is registered, not where it flew from.
+- The data covers selected hours over five days, not every hour.
+- Flagged flights are worth a second look, not confirmed incidents.
+
+---
+
+<details>
+<summary><strong>Technical details: how it works and how to run it</strong></summary>
+
+### Pipeline
 
 ```
-OpenSky API
-    │  Python poller (retries, timeouts, OAuth2 sign-in)
-    ▼
-Kafka topic "aircraft-states"          ← streaming path: one message per aircraft
-    │  consumer regroups messages into complete snapshots
-    ▼
-Google Cloud Storage (raw JSON, one file per snapshot)
-    │  event-driven BigQuery Data Transfer appends each new file
-    ▼
-BigQuery: raw_snapshot_json → raw → stg → gold → ml
-    │  Isolation Forest (scikit-learn)
-    ▼
-aircraft_anomaly_results
-    │
-    ▼
-Tableau dashboards → Tableau Public → portfolio
+OpenSky API → Python poller → Kafka → Google Cloud Storage
+  → BigQuery Data Transfer → BigQuery (raw → stg → gold → ml)
+  → Isolation Forest (scikit-learn) → Tableau
 ```
 
-### BigQuery layers (`open-sky-aviation.aviation_analytics`)
+### BigQuery tables (`open-sky-aviation.aviation_analytics`)
 
 | Table | Contents |
 |---|---|
-| `raw_snapshot_json` | Landing table: one row per snapshot, aircraft nested in an array |
-| `raw_aircraft_states` | One row per aircraft per snapshot, values as sent by OpenSky |
-| `stg_aircraft_states` | Unix timestamps converted to `TIMESTAMP` |
-| `gold_aircraft_states` | Analysis-ready columns; the source for the dashboards |
-| `ml_aircraft_states` | Airborne observations with complete flight data, for the model |
-| `aircraft_anomaly_results` | Anomaly score and flag for every scored observation |
+| `raw_snapshot_json` | Landing table: one row per snapshot |
+| `raw_aircraft_states` | One row per aircraft per snapshot |
+| `stg_aircraft_states` | Timestamps converted |
+| `gold_aircraft_states` | Analysis-ready data used by the dashboards |
+| `ml_aircraft_states` | Airborne observations with complete data, for the model |
+| `aircraft_anomaly_results` | Anomaly score and flag for each scored observation |
 
-## Repository layout
+### Code
 
 | Path | Purpose |
 |---|---|
-| `src/opensky_client.py` | Fetches and validates aircraft states from the OpenSky API, with retries and OAuth2 sign-in |
-| `src/poll_opensky.py` | Polls OpenSky on an interval and publishes each record to Kafka |
-| `src/kafka_producer.py` | Kafka producer for the `aircraft-states` topic |
-| `src/kafka_gcs_consumer.py` | Regroups Kafka messages into snapshots and uploads them to Cloud Storage |
-| `src/cloud_poll_opensky.py` | Single poll that writes a snapshot straight to Cloud Storage (no Kafka) |
-| `src/gcs_client.py` | Reads, validates and writes raw snapshot files in Cloud Storage |
-| `src/refresh_warehouse.py` | Rebuilds the raw, stg, gold and ml layers from `raw_snapshot_json` |
-| `src/anomaly_model.py` | Isolation Forest helpers |
-| `src/bigquery_client.py` | Loads the ML layer from BigQuery |
-| `src/score_anomalies.py` | Trains the model and replaces `aircraft_anomaly_results` |
-| `src/aviation_anomaly_analysis.ipynb` | Exploratory analysis and model development |
-| `tests/` | Unit tests for the client and pollers |
-| `Dockerfile` | Container for the single-poll job |
+| `src/opensky_client.py` | Fetches aircraft positions, with retries and OAuth2 sign-in |
+| `src/poll_opensky.py`, `src/kafka_producer.py` | Poll OpenSky and publish each record to Kafka |
+| `src/kafka_gcs_consumer.py` | Regroup Kafka messages into snapshots and upload them to Cloud Storage |
+| `src/cloud_poll_opensky.py` | Single poll straight to Cloud Storage |
+| `src/refresh_warehouse.py` | Rebuild the BigQuery layers from the landing table |
+| `src/score_anomalies.py`, `src/anomaly_model.py` | Train the model and score every observation |
+| `src/aviation_anomaly_analysis.ipynb` | Exploratory analysis |
+| `tests/` | Unit tests |
 
-## Running it
+### Run it
 
-Requirements: Python 3.11+, a Google Cloud project with BigQuery and Cloud
-Storage, and Google application-default credentials
-(`gcloud auth application-default login`). The streaming path also needs a
-Kafka broker on `localhost:9092`.
+Requires Python 3.11+, a Google Cloud project with BigQuery and Cloud Storage,
+and application-default credentials. The streaming path also needs Kafka on
+`localhost:9092`.
 
 ```bash
 python -m venv .venv
 .venv/bin/pip install requests google-cloud-storage google-cloud-bigquery kafka-python pandas pyarrow db-dtypes scikit-learn pytest
-```
 
-Optional: an OpenSky API client raises the request limit. Set its credentials
-as environment variables; without them the client uses anonymous access.
-
-```bash
-export OPENSKY_CLIENT_ID=...
-export OPENSKY_CLIENT_SECRET=...
-```
-
-**Collect data** (choose one path):
-
-```bash
-# Streaming: poll every 5 minutes into Kafka, and consume into Cloud Storage
+# Collect data: streaming via Kafka...
 .venv/bin/python -m src.poll_opensky
 .venv/bin/python -m src.kafka_gcs_consumer
-
-# Batch: one snapshot straight to Cloud Storage
+# ...or one snapshot straight to Cloud Storage
 .venv/bin/python -m src.cloud_poll_opensky
-```
 
-New files are loaded into `raw_snapshot_json` by the BigQuery Data Transfer.
-Don't load them by hand, or they will be appended twice.
-
-**Rebuild the warehouse and rescore anomalies:**
-
-```bash
+# Rebuild the warehouse and rescore anomalies
 .venv/bin/python -m src.refresh_warehouse
 .venv/bin/python -m src.score_anomalies
-```
 
-**Run the tests:**
-
-```bash
+# Tests (one calls the live OpenSky API)
 .venv/bin/python -m pytest tests
 ```
 
-One test calls the live OpenSky API.
+Set `OPENSKY_CLIENT_ID` and `OPENSKY_CLIENT_SECRET` to use an OpenSky API
+client; without them the poller uses anonymous access. New files in Cloud
+Storage are loaded into BigQuery by an event-driven Data Transfer, so don't
+load them by hand.
 
-## Data quality
-
-- Duplicate snapshots in the landing table are removed before they reach the
-  raw layer, so no aircraft appears twice in a snapshot in any layer.
-- Units are converted to feet and knots for an aviation audience.
-- Missing values are labelled openly (`Unknown`, `Not scored`) rather than
-  dropped or mislabelled.
-- Outliers were inspected before any were excluded: readings above
-  50,000 ft are a mix of genuine high-altitude balloons and barometric
-  altimeter errors.
-
-## Key findings
-
-- **Traffic builds through the afternoon:** aircraft tracked rose 53% between
-  11:20 and 14:40 UTC on 8 October (9,055 → 13,833).
-- **Traffic doubles from early morning to mid-afternoon (UTC):** about 6.4K
-  aircraft per snapshot at 06:00 against 13.6K at 14:00.
-- **Most aircraft are cruising at any moment:** 57.5% of observations are in
-  level flight, 32% are climbing or descending and 10% are on the ground.
-- **Airliners cruise at 34,000–38,000 ft**, which holds 30% of airborne
-  observations.
-- **US carriers lead the airline callsigns** (United, American, Delta,
-  Southwest), and half of all tracked aircraft are US-registered.
-- **The anomaly model flags 5% of scored observations** (23,097 of 461,937).
-  Flagged observations climb or descend about 6× more steeply than normal ones,
-  at lower altitudes.
-
-## Limitations
-
-- Coverage follows OpenSky's volunteer receivers, so North America and Europe
-  are over-represented.
-- `origin_country` is the country of registration, not where a flight
-  departed; the data contains no airports or routes.
-- Snapshots cover selected hours on five days, not continuous 24-hour data.
-- Anomalies are a screening signal, not confirmed incidents. The model flags
-  the 5% of observations least like the rest by design.
-
-## Engineering notes
-
-The poller first ran on Cloud Run every 15 minutes, but logs showed OpenSky
-refusing connections from Google Cloud, so collection moved to a local
-machine while storage, loading and modelling stayed in the cloud. Failed polls
-now exit with an error instead of reporting success.
-
-## Status
-
-- Traffic Overview dashboard: published
-- Fleet & Operations dashboard: built, publishing soon
-- Anomaly Screening dashboard: in progress
-
-## Tech stack
-
-Python · Kafka · Google Cloud Storage · BigQuery · SQL · scikit-learn · Tableau · Docker
+</details>
