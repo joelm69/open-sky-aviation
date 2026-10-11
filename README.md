@@ -6,7 +6,7 @@ I built a system that collects live aircraft positions from around the world,
 cleans and organises the data in the cloud, uses machine learning to spot
 unusual flights, and presents the results in interactive Tableau dashboards.
 
-**[View the interactive dashboard →](https://public.tableau.com/views/aviation_analytics/Traffic_Overview)**
+**[View the interactive dashboards →](https://public.tableau.com/views/aviation_analytics/Traffic_Overview)**
 &nbsp;·&nbsp;
 **[Read the full case study →](https://joeldataportfolio.streamlit.app/open_sky_aviation)**
 
@@ -45,10 +45,14 @@ unusual flights, and presents the results in interactive Tableau dashboards.
 - **Different airlines have different "signatures".** Regional airlines spend
   more time on the ground and less time at cruising height than major
   airlines, because their flights are shorter.
-- **The machine-learning model flags about 5% of observations as unusual.**
-  These are mostly aircraft climbing or descending far more steeply than
-  normal. It also caught a high-altitude research balloon and several faulty
-  sensor readings.
+- **The machine-learning model flags about 5% of observations as unusual**,
+  involving 13,860 aircraft. Flagged flights climb and descend about **6× more
+  steeply** than normal ones, at lower altitudes.
+- **Unusual flights follow the traffic.** They appear at a similar 4–8% rate
+  in every region, with no single hotspot.
+- **The model caught real oddities:** a high-altitude research balloon and
+  physically implausible readings, such as airliners reported at 100–150 knots
+  at cruising height.
 
 ## Recommendations
 
@@ -64,11 +68,11 @@ unusual flights, and presents the results in interactive Tableau dashboards.
 
 ## The dashboards
 
-| Dashboard | What it shows | Status |
-|---|---|---|
-| **Traffic Overview** | Headline numbers, a live map of aircraft, and how traffic changes through the day | [Published](https://public.tableau.com/views/aviation_analytics/Traffic_Overview) |
-| **Fleet & Operations** | Top airlines and countries, flight phases and cruising altitudes. Click an airline to compare it with the rest | Built, publishing soon |
-| **Anomaly Screening** | The flights the model flagged, where they are and what makes them unusual | In progress |
+| Dashboard | What it shows |
+|---|---|
+| **[Traffic Overview](https://public.tableau.com/views/aviation_analytics/Traffic_Overview)** | Headline numbers, a map of aircraft in the sky, and how traffic changes through the day |
+| **[Fleet & Operations](https://public.tableau.com/views/aviation_analytics/Fleet_Operations)** | Top airlines and countries, flight phases and cruising altitudes. Click an airline to compare it with the rest |
+| **[Anomaly Screening](https://public.tableau.com/views/aviation_analytics/Anomaly_Screening)** | The flights the model flagged, where they are, what makes them unusual, and which aircraft to review first |
 
 ## Skills this project demonstrates
 
@@ -85,15 +89,6 @@ unusual flights, and presents the results in interactive Tableau dashboards.
 - **Problem solving:** when the data provider blocked requests from Google
   Cloud, I diagnosed it from the logs and redesigned the collection step while
   keeping the rest of the system in the cloud.
-
-## Being honest about the data
-
-- OpenSky relies on volunteer receivers, so North America and Europe are
-  covered best. The numbers reflect the aircraft OpenSky could see, not every
-  flight in the world.
-- An aircraft's "country" is where it is registered, not where it flew from.
-- The data covers selected hours over five days, not every hour.
-- Flagged flights are worth a second look, not confirmed incidents.
 
 ---
 
