@@ -2,93 +2,36 @@
 
 **How busy is the sky, who is flying in it, and which flights look unusual?**
 
-I built a system that collects live aircraft positions from around the world,
-cleans and organises the data in the cloud, uses machine learning to spot
-unusual flights, and presents the results in interactive Tableau dashboards.
+An end-to-end data project: live aircraft positions collected from the
+OpenSky Network, cleaned in Google BigQuery, screened with machine learning
+and presented in three interactive Tableau dashboards.
 
-**[View the interactive dashboards →](https://public.tableau.com/views/aviation_analytics/Traffic_Overview)**
+**[Explore the dashboards →](https://public.tableau.com/views/aviation_analytics/Traffic_Overview)**
 &nbsp;·&nbsp;
-**[Read the full case study →](https://joeldataportfolio.streamlit.app/open_sky_aviation)**
+**[Read the case study →](https://joeldataportfolio.streamlit.app/open_sky_aviation)**
+
+**521,880** observations · **48,577** aircraft · **4–8 October 2026**
 
 ---
 
-## At a glance
+## Key findings
+
+- **Traffic doubles through the day:** from about 6,400 aircraft in the early morning to 13,600 by mid-afternoon (UTC).
+- **US airlines dominate:** United, American, Delta and Southwest lead, and half of all aircraft are US-registered.
+- **6 in 10 aircraft are cruising at any moment**, mostly at 34,000–38,000 ft.
+- **The ML model flags 5% of observations as unusual:** flights climbing or descending about 6× more steeply than normal. It also caught a research balloon and faulty sensor readings.
+
+## Dashboards
 
 | | |
 |---|---|
-| **Data analysed** | 521,880 aircraft observations |
-| **Aircraft tracked** | 48,577 |
-| **Period** | 4–8 October 2026 |
-| **Source** | OpenSky Network, a public feed of live aircraft positions |
-| **Tools** | Python · SQL · Google Cloud · BigQuery · Kafka · Machine learning · Tableau |
+| **[Traffic Overview](https://public.tableau.com/views/aviation_analytics/Traffic_Overview)** | How much traffic, when it peaks and where |
+| **[Fleet & Operations](https://public.tableau.com/views/aviation_analytics/Fleet_Operations)** | Top airlines and countries; click an airline to compare it |
+| **[Anomaly Screening](https://public.tableau.com/views/aviation_analytics/Anomaly_Screening)** | Which flights look unusual and why |
 
-## The questions I set out to answer
+## Skills demonstrated
 
-1. How much air traffic is there, and when is it busiest?
-2. Where in the world is traffic concentrated?
-3. Which airlines and countries have the most aircraft in the sky?
-4. How do aircraft spend their time: cruising, climbing, descending or on the ground?
-5. Which flights behave unusually, and why?
-
-## What I found
-
-- **Traffic grows quickly through the day.** The number of aircraft in the
-  sky rose **53% in three hours** on 8 October, and it **more than doubles**
-  from early morning to mid-afternoon (UTC).
-- **US airlines dominate.** United, American, Delta and Southwest have the
-  most aircraft tracked, and **half of all aircraft are registered in the US**.
-- **Most aircraft are cruising at any moment.** About 6 in 10 are in level
-  flight, 3 in 10 are climbing or descending near airports, and 1 in 10 is on
-  the ground.
-- **Airliners cruise at 34,000–38,000 ft**, the altitude band holding 30% of
-  airborne traffic.
-- **Different airlines have different "signatures".** Regional airlines spend
-  more time on the ground and less time at cruising height than major
-  airlines, because their flights are shorter.
-- **The machine-learning model flags about 5% of observations as unusual**,
-  involving 13,860 aircraft. Flagged flights climb and descend about **6× more
-  steeply** than normal ones, at lower altitudes.
-- **Unusual flights follow the traffic.** They appear at a similar 4–8% rate
-  in every region, with no single hotspot.
-- **The model caught real oddities:** a high-altitude research balloon and
-  physically implausible readings, such as airliners reported at 100–150 knots
-  at cruising height.
-
-## Recommendations
-
-- **Plan staffing around the afternoon peak**, when traffic is highest, and
-  schedule maintenance in the quieter early-morning hours.
-- **Use the anomaly model as a review queue, not an alarm.** Start with the
-  aircraft flagged most often.
-- **Build automatic data-quality checks into the pipeline**, such as
-  comparing an aircraft's two altitude readings, so faulty data is caught
-  early.
-- **Widen data coverage before drawing global conclusions**, especially for
-  Africa and Asia.
-
-## The dashboards
-
-| Dashboard | What it shows |
-|---|---|
-| **[Traffic Overview](https://public.tableau.com/views/aviation_analytics/Traffic_Overview)** | Headline numbers, a map of aircraft in the sky, and how traffic changes through the day |
-| **[Fleet & Operations](https://public.tableau.com/views/aviation_analytics/Fleet_Operations)** | Top airlines and countries, flight phases and cruising altitudes. Click an airline to compare it with the rest |
-| **[Anomaly Screening](https://public.tableau.com/views/aviation_analytics/Anomaly_Screening)** | The flights the model flagged, where they are, what makes them unusual, and which aircraft to review first |
-
-## Skills this project demonstrates
-
-- **Data engineering:** collecting live data automatically, streaming it with
-  Kafka and storing it in Google Cloud.
-- **SQL and data modelling:** turning raw data into clean, analysis-ready
-  tables in BigQuery.
-- **Data quality:** removing duplicates, checking outliers before deleting
-  them, and labelling missing data honestly.
-- **Machine learning:** an Isolation Forest model that screens for unusual
-  flight behaviour.
-- **Data visualisation:** interactive Tableau dashboards designed around
-  business questions.
-- **Problem solving:** when the data provider blocked requests from Google
-  Cloud, I diagnosed it from the logs and redesigned the collection step while
-  keeping the rest of the system in the cloud.
+**Data engineering** (Python, Kafka, Google Cloud) · **SQL and data modelling** (BigQuery) · **Data quality** · **Machine learning** (Isolation Forest) · **Data visualisation** (Tableau) · **Problem solving:** when OpenSky blocked requests from Google Cloud, I diagnosed it from the logs and moved data collection off the cloud while keeping storage and analysis in it.
 
 ---
 
