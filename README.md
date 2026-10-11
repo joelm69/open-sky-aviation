@@ -94,9 +94,5 @@ python -m venv .venv
 .venv/bin/python -m pytest tests
 ```
 
-Set `OPENSKY_CLIENT_ID` and `OPENSKY_CLIENT_SECRET` to use an OpenSky API
-client; without them the poller uses anonymous access. New files in Cloud
-Storage are loaded into BigQuery by an event-driven Data Transfer, so don't
-load them by hand.
 
 </details>
